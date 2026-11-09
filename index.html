@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261109a">
+  <link rel="stylesheet" href="css/style.css?v=20261109b">
 </head>
 <body>
   <div class="snow" aria-hidden="true"></div>
@@ -140,6 +140,10 @@
             <button class="btn primary" type="submit" id="chat-send">남기기</button>
           </div>
         </form>
+        <div class="chat-tools">
+          <span class="muted small" id="chat-synced"></span>
+          <button class="btn ghost" type="button" id="chat-refresh">🔄 새로고침</button>
+        </div>
         <ul class="chat-list" id="chat-list"></ul>
         <p class="muted small" id="chat-empty">아직 글이 없어요. 첫 수다의 주인공이 되어주세요!</p>
         <p class="muted small">링크를 아는 사람은 누구나 볼 수 있으니 연락처 같은 개인정보는 적지 말아주세요. 내가 쓴 글은 이 폰에서만 삭제할 수 있어요.</p>
@@ -219,7 +223,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=20261109a"></script>
-  <script src="js/app.js?v=20261109a"></script>
+  <script src="js/config.js?v=20261109b"></script>
+  <script src="js/app.js?v=20261109b"></script>
 </body>
 </html>

@@ -330,6 +330,7 @@
     }
     $("chat-notice").hidden = true;
     renderChat(data || []);
+    $("chat-synced").textContent = "마지막 갱신 " + new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "numeric", minute: "2-digit", second: "2-digit" }).format(new Date());
   }
 
   async function postChat(e) {
@@ -401,14 +402,38 @@
   $("chat-form").addEventListener("submit", postChat);
   loadChat().catch(() => {});
 
-  // 다른 사람의 선택·글을 반영하기 위해 화면이 보일 때 15초마다 새로고침
-  setInterval(() => {
-    if (document.hidden) return;
+  // 다른 사람의 선택·글을 반영하기 위해 15초마다 새로고침한다.
+  // 카카오톡 같은 앱 안 브라우저는 복귀해도 visibilitychange 가 안 오거나 document.hidden 이 틀릴 수 있어,
+  // 보임 여부와 상관없이 돌리고(숨겨진 동안은 브라우저가 알아서 멈춘다) 복귀 이벤트마다 바로 갱신한다.
+  const refreshLive = () => {
     if (!busy) loadSlots().catch(() => {});
     if (!chatBusy) loadChat().catch(() => {});
-  }, 15000);
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) { loadSlots().catch(() => {}); loadGallery(); loadChat().catch(() => {}); }
+  };
+  let lastRefresh = 0;
+  const refreshAll = () => {
+    const now = Date.now();
+    if (now - lastRefresh < 2000) return; // 이벤트가 한꺼번에 와도 한 번만
+    lastRefresh = now;
+    refreshLive();
+    loadGallery();
+  };
+  setInterval(refreshLive, 15000);
+  // 뒤로가기·앱 복귀로 예전 화면이 그대로 복원되는 경우(pageshow), 다시 앱으로 돌아온 경우(focus·visibilitychange)
+  ["pageshow", "focus", "online"].forEach((ev) => window.addEventListener(ev, refreshAll));
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAll(); });
+
+  // 수동 새로고침 버튼
+  $("chat-refresh").addEventListener("click", async () => {
+    const btn = $("chat-refresh");
+    btn.disabled = true;
+    try {
+      await Promise.all([loadSlots(), loadChat(), loadGallery()]);
+      toast("최신 내용을 불러왔어요");
+    } catch {
+      toast("불러오지 못했어요. 잠시 후 다시 시도해 주세요");
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   // 설정 전에도 조 화면 모양은 보이도록
