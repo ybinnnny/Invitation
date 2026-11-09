@@ -59,10 +59,26 @@ body {
 }
 .hero h1 {
   font-family: "Gowun Batang", serif;
-  font-size: clamp(30px, 9vw, 40px);
+  font-size: clamp(34px, 10vw, 44px);
   line-height: 1.25;
   margin: 0;
+  white-space: pre-line; /* 제목의 줄바꿈 유지 */
 }
+.share-btn {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top));
+  right: 14px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .35);
+  background: rgba(255, 255, 255, .12);
+  color: #fff;
+  font: inherit; font-size: 13px; font-weight: 500;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.share-btn:active { background: rgba(255, 255, 255, .25); }
 .hero-sub { margin: 8px 0 0; color: #d6d9ea; }
 .dday {
   display: inline-block;

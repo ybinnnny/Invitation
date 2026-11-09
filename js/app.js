@@ -61,6 +61,12 @@
       try { await navigator.clipboard.writeText(text); toast("주소를 복사했어요"); }
       catch { window.prompt("주소를 길게 눌러 복사하세요", text); }
     });
+    // 공유하기: 이 초대장의 링크(쿼리·해시 제외)를 복사
+    $("share-btn").addEventListener("click", async () => {
+      const url = location.origin + location.pathname;
+      try { await navigator.clipboard.writeText(url); toast("링크를 복사했어요. 단톡방에 붙여넣기 하세요"); }
+      catch { window.prompt("링크를 길게 눌러 복사하세요", url); }
+    });
     $("ev-directions").replaceChildren(...(EV.directions || []).map((d) => el("li", { textContent: d })));
 
     // 준비물 (일정 카드 안)
