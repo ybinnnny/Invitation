@@ -36,6 +36,7 @@
     <a href="#teams">조 선택</a>
     <a href="#program">프로그램</a>
     <a href="#photos">사진첩</a>
+    <a href="#chat">수다</a>
   </nav>
 
   <main>
@@ -117,6 +118,31 @@
         <p class="status" id="upload-status" role="status" aria-live="polite"></p>
         <div class="gallery" id="gallery"></div>
         <p class="muted small" id="gallery-empty">아직 올라온 사진이 없어요. 첫 사진의 주인공이 되어주세요!</p>
+      </div>
+    </section>
+
+    <section id="chat" class="card">
+      <h2>수다공간 <span class="badge">자유롭게</span></h2>
+      <p class="chat-intro">💬 제안, 문의, 잡담, 응원… 뭐든 편하게 남겨주세요.<br>작성자명은 닉네임이나 익명도 괜찮아요.</p>
+      <div class="notice" id="chat-notice" hidden></div>
+      <div id="chat-body">
+        <form class="chat-form" id="chat-form" autocomplete="off">
+          <label class="field">
+            <span>작성자</span>
+            <input type="text" id="chat-name" maxlength="20" placeholder="이름 또는 닉네임 (비우면 익명)">
+          </label>
+          <label class="field">
+            <span>내용</span>
+            <textarea id="chat-text" maxlength="300" rows="3" placeholder="예) 주차는 어디에 하면 돼요? / 게임 아이디어 있어요! / 컬러풀 뭐 입을지 고민 중 😂"></textarea>
+          </label>
+          <div class="chat-row">
+            <span class="muted small" id="chat-count">0 / 300</span>
+            <button class="btn primary" type="submit" id="chat-send">남기기</button>
+          </div>
+        </form>
+        <ul class="chat-list" id="chat-list"></ul>
+        <p class="muted small" id="chat-empty">아직 글이 없어요. 첫 수다의 주인공이 되어주세요!</p>
+        <p class="muted small">링크를 아는 사람은 누구나 볼 수 있으니 연락처 같은 개인정보는 적지 말아주세요. 내가 쓴 글은 이 폰에서만 삭제할 수 있어요.</p>
       </div>
     </section>
   </main>

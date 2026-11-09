@@ -1,13 +1,14 @@
 # 분당 8선녀 송년회 모바일 초대장
 
-정적 페이지(GitHub Pages) + Supabase(조 선택 DB, 사진 저장소). 로그인 없이 링크로 접속.
+정적 페이지(GitHub Pages) + Supabase(조 선택·수다공간 DB, 사진 저장소). 로그인 없이 링크로 접속.
 
 ```
 index.html          페이지 구조 + 게임 안내 팝업
 css/style.css       디자인
 js/config.js        ★ 행사 정보·Supabase 접속값 (여기만 고치면 됨)
-js/app.js           조 선택·사진 업로드 로직
-supabase/schema.sql Supabase 에 한 번 실행할 SQL
+js/app.js           조 선택·사진 업로드·수다공간 로직
+supabase/schema.sql Supabase 에 한 번 실행할 SQL (조 선택 + 사진)
+supabase/chat.sql   수다공간(자유 게시판) SQL — schema.sql 다음에 실행
 ```
 
 ## 1. Supabase 준비 (약 10분)
@@ -15,6 +16,7 @@ supabase/schema.sql Supabase 에 한 번 실행할 SQL
 1. https://supabase.com 에 개인 계정으로 가입하고 **New project** 를 만듭니다. Region 은 `Northeast Asia (Seoul)` 를 고르고, DB 비밀번호는 아무 데도 적지 마세요.
 2. **SQL Editor** 에 `supabase/schema.sql` 전체를 붙여넣고 **Run** 합니다.
    - 확인: Table Editor 에 `team_slots`, Storage 에 `photos` 버킷(Public, 5MB)이 보이면 성공이에요.
+   - 이어서 `supabase/chat.sql` 도 같은 방법으로 실행합니다. Table Editor 에 `chat_messages` 가 보이면 성공이에요.
 3. **Project Settings → API keys**(또는 Data API)에서 다음 두 값을 `js/config.js` 의 `supabase` 에 넣습니다.
    - `url`: Project URL (`https://xxxx.supabase.co`)
    - `key`: **publishable key**(`sb_publishable_…`) 또는 legacy **anon** key
@@ -44,6 +46,7 @@ supabase/schema.sql Supabase 에 한 번 실행할 SQL
 - [ ] 폰(LTE, 사내 와이파이 아님)으로 접속 → 일정·지도 버튼·게임 팝업 확인
 - [ ] 조 선택 테스트 → 참가 → 취소. 끝나면 SQL Editor 에서 `truncate public.team_slots;`
 - [ ] 사진 1장 업로드 테스트 → Storage 에서 삭제
+- [ ] 수다공간 글 1개 남기기·삭제 테스트. 끝나면 SQL Editor 에서 `truncate public.chat_messages;`
 - [ ] **Supabase 무료 프로젝트는 1주일간 요청이 없으면 일시정지돼요.** 링크 공유 직전과 행사 당일 아침에 대시보드에서 상태를 확인하고, Paused 면 Restore 하세요.
 
 ## 4. 동작 방식 / 보안 메모
@@ -55,6 +58,8 @@ supabase/schema.sql Supabase 에 한 번 실행할 SQL
 | 이름 중복 | 같은 이름(대소문자·앞뒤 공백 무시)은 한 자리만 가능 |
 | 사진 | 브라우저에서 긴 변 1920px JPEG 로 줄여 업로드. 버킷이 5MB 와 이미지 형식을 서버에서 강제 |
 | 사진 권한 | 익명 사용자는 목록 보기와 `uploads/` 업로드만 가능(총 300장). 수정·삭제 불가 |
+| 수다공간 | `post_message()` 로 글 남기기(작성자명을 비우면 '익명', 내용 1~300자), `list_messages()` 로 최신순 조회. 전체 300개 상한, 1분에 15개 초과 시 거부. 테이블은 외부에서 직접 읽거나 쓸 수 없음 |
+| 내 글 삭제 | 글을 쓸 때 받은 토큰을 그 폰의 localStorage 에 저장하고, `delete_message(token)` 으로만 삭제 가능. 다른 사람 글은 관리자가 SQL 로 삭제 |
 | 노출되는 키 | publishable(anon) key 만 노출되며, 위 함수와 정책 범위 밖으로는 쓸 수 없음 |
 
 **한계**: 로그인이 없어서 링크를 아는 사람은 누구나 조를 고르고 사진을 올릴 수 있어요. 남의 이름으로 자리를 잡는 장난을 막는 장치는 없으니, 생기면 관리자가 SQL 로 정리하세요.

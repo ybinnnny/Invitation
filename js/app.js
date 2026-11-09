@@ -103,13 +103,13 @@
   }) : null;
 
   function showNotConfigured() {
-    for (const k of ["teams", "photos"]) {
+    for (const k of ["teams", "photos", "chat"]) {
       const n = $(`${k}-notice`);
       n.textContent = window.supabase
         ? "아직 서버 설정 전이에요. (js/config.js 의 supabase url·key 를 입력하세요)"
         : "서버 라이브러리를 불러오지 못했어요. 네트워크를 확인하고 새로고침해 주세요.";
       n.hidden = false;
-      $(`${k}-body`).querySelectorAll("button, input").forEach((x) => { x.disabled = true; });
+      $(`${k}-body`).querySelectorAll("button, input, textarea").forEach((x) => { x.disabled = true; });
     }
   }
 
@@ -278,10 +278,114 @@
     }));
   }
 
+  // ── 수다공간 ─────────────────────────────────────────────────
+  const CHAT_ERR = {
+    INVALID_BODY: "내용을 1~300자로 입력해 주세요.",
+    INVALID_NAME: "작성자명은 20자 이하로 입력해 주세요.",
+    CHAT_FULL: "수다공간이 가득 찼어요. 주최자에게 알려주세요.",
+    TOO_FAST: "지금 글이 한꺼번에 몰렸어요. 잠시 뒤에 다시 남겨주세요.",
+  };
+  const chatErrMsg = (e) => {
+    const m = String(e?.message || e || "");
+    const key = Object.keys(CHAT_ERR).find((k) => m.includes(k));
+    return key ? CHAT_ERR[key] : "연결이 불안정해요. 잠시 후 다시 시도해 주세요.";
+  };
+
+  let chatBusy = false;
+  const myChatTokens = () => store.get("chat-tokens") || {}; // { [글 id]: 삭제용 토큰 }
+
+  function fmtChatTime(iso) {
+    const d = new Date(iso);
+    const sec = (Date.now() - d.getTime()) / 1000;
+    if (sec < 60) return "방금 전";
+    if (sec < 3600) return `${Math.floor(sec / 60)}분 전`;
+    if (sec < 86400) return `${Math.floor(sec / 3600)}시간 전`;
+    return new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" }).format(d);
+  }
+
+  function renderChat(msgs) {
+    const tokens = myChatTokens();
+    $("chat-empty").hidden = msgs.length > 0;
+    $("chat-list").replaceChildren(...msgs.map((m) => {
+      const mine = !!tokens[m.id];
+      const head = el("div", { className: "chat-head" },
+        el("b", { textContent: m.name }),
+        el("time", { textContent: fmtChatTime(m.created_at), dateTime: m.created_at }));
+      if (mine) {
+        const del = el("button", { className: "chat-del", type: "button", textContent: "삭제" });
+        del.addEventListener("click", () => deleteChat(m.id));
+        head.append(del);
+      }
+      return el("li", { className: "chat-item" + (mine ? " own" : "") },
+        head, el("p", { className: "chat-text", textContent: m.body }));
+    }));
+  }
+
+  async function loadChat() {
+    const { data, error } = await sb.rpc("list_messages", { p_limit: 100 });
+    if (error) {
+      $("chat-notice").textContent = "수다공간을 불러오지 못했어요. 새로고침해 주세요.";
+      $("chat-notice").hidden = false;
+      throw error;
+    }
+    $("chat-notice").hidden = true;
+    renderChat(data || []);
+  }
+
+  async function postChat(e) {
+    e.preventDefault();
+    if (chatBusy) return;
+    const name = $("chat-name").value.trim();
+    const body = $("chat-text").value.trim();
+    if (!body) { toast("내용을 입력해 주세요"); $("chat-text").focus(); return; }
+    chatBusy = true;
+    $("chat-send").disabled = true;
+    try {
+      const { data, error } = await sb.rpc("post_message", { p_name: name, p_body: body });
+      if (error) throw error;
+      const tokens = myChatTokens();
+      tokens[data.id] = data.token;
+      store.set("chat-tokens", tokens);
+      store.set("chat-name", name);
+      $("chat-text").value = "";
+      $("chat-count").textContent = "0 / 300";
+      toast("남겼어요 💬");
+    } catch (err) {
+      toast(chatErrMsg(err));
+    } finally {
+      chatBusy = false;
+      $("chat-send").disabled = false;
+      await loadChat().catch(() => {});
+    }
+  }
+
+  async function deleteChat(id) {
+    const tokens = myChatTokens();
+    if (!tokens[id] || chatBusy) return;
+    if (!window.confirm("내가 쓴 글을 삭제할까요?")) return;
+    chatBusy = true;
+    try {
+      const { error } = await sb.rpc("delete_message", { p_token: tokens[id] });
+      if (error) throw error;
+      delete tokens[id];
+      store.set("chat-tokens", tokens);
+      toast("삭제했어요");
+    } catch (err) {
+      toast(chatErrMsg(err));
+    } finally {
+      chatBusy = false;
+      await loadChat().catch(() => {});
+    }
+  }
+
   // ── 시작 ─────────────────────────────────────────────────────
   renderStatic();
   setupModals();
   $("my-name").value = store.get("my-name") || "";
+  $("chat-name").value = store.get("chat-name") || "";
+  $("chat-text").addEventListener("input", () => {
+    $("chat-count").textContent = `${$("chat-text").value.length} / 300`;
+  });
 
   if (!configured) { showNotConfigured(); renderTeamsPreview(); return; }
 
@@ -294,11 +398,17 @@
 
   loadSlots().catch(() => { $("teams-notice").textContent = "조 현황을 불러오지 못했어요. 새로고침해 주세요."; $("teams-notice").hidden = false; renderTeams(); });
   loadGallery();
+  $("chat-form").addEventListener("submit", postChat);
+  loadChat().catch(() => {});
 
-  // 다른 사람의 선택을 반영하기 위해 화면이 보일 때 15초마다 새로고침
-  setInterval(() => { if (!document.hidden && !busy) loadSlots().catch(() => {}); }, 15000);
+  // 다른 사람의 선택·글을 반영하기 위해 화면이 보일 때 15초마다 새로고침
+  setInterval(() => {
+    if (document.hidden) return;
+    if (!busy) loadSlots().catch(() => {});
+    if (!chatBusy) loadChat().catch(() => {});
+  }, 15000);
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) { loadSlots().catch(() => {}); loadGallery(); }
+    if (!document.hidden) { loadSlots().catch(() => {}); loadGallery(); loadChat().catch(() => {}); }
   });
 
   // 설정 전에도 조 화면 모양은 보이도록
