@@ -259,6 +259,12 @@ main {
 .steps li { margin: 6px 0; font-weight: 700; }
 .steps span { display: block; font-weight: 400; color: var(--muted); font-size: 13px; }
 
+/* 게임 소개: 사진 공개 단계 예시 */
+.reveal { list-style: none; margin: 8px 0 16px; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.reveal li { text-align: center; font-size: 12px; color: var(--muted); }
+.reveal img { display: block; width: 100%; height: auto; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: #eee; margin-bottom: 4px; }
+.reveal li:last-child span { color: var(--red); font-weight: 700; }
+
 .lightbox {
   position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, .92);
   display: flex; align-items: center; justify-content: center; padding: 16px;
