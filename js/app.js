@@ -573,6 +573,7 @@
   // ── 시작 ─────────────────────────────────────────────────────
   renderStatic();
   setupModals();
+  if (location.hash === "#balance") document.querySelector('[data-open="balance-modal"]').click(); // 진행자용 직접 링크
   $("my-name").value = store.get("my-name") || "";
   $("chat-name").value = store.get("chat-name") || "";
   $("bg-name").value = store.get("bg-name") || store.get("my-name") || "";
