@@ -339,3 +339,7 @@ main {
 .bg-rules { margin-top: 6px; }
 .bg-rules h3 { font-size: 15px; margin: 18px 0 6px; color: var(--red); }
 .bg-rules .dots { margin-top: 6px; }
+.bg-qform { margin-bottom: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.bg-qform .bg-h3 { margin-top: 0; }
+.bg-qform .btn.block { margin-top: 4px; }
+.bg-own { margin-left: 6px; font-size: 11px; font-weight: 500; color: var(--red); background: #fbe9e5; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }

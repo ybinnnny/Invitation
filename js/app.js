@@ -379,15 +379,20 @@
     }
   }
 
-  // ── GAME 3 밸런스 게임 ───────────────────────────────────────
-  // 서버(balance.sql)는 공개 전 문제의 표 수를 내보내지 않는다. 점수는 서버가 계산한다.
-  const QS = CFG.balance || [];
+  // ── GAME 3 황금밸런스 게임 ───────────────────────────────────
+  // 질문은 현장에서 각자 낸다(진행자가 '질문 제출'을 연 동안만). 출제자·선택 비중은 공개 전에 서버가 내보내지 않는다.
+  // 출제자 점수: 8표가 4:4 → 2점, 3:5 → 1점, 그 외 0점 (표 차이 0~1 → 2점, 2 → 1점). 점수는 서버가 계산.
+  const MAX_PLAYERS = 8;
   const BG_ERR = {
     INVALID_NAME: "이름을 1~20자로 입력해 주세요.",
     NAME_TAKEN: "이미 같은 이름으로 참가한 사람이 있어요. 다른 이름(예: 성까지)으로 입력해 주세요.",
-    GAME_FULL: "참가 인원이 가득 찼어요. 주최자에게 알려주세요.",
+    GAME_FULL: "참가 인원(8명)이 가득 찼어요.",
+    NOT_SUBMIT: "지금은 질문을 낼 수 있는 시간이 아니에요.",
+    INVALID_QUESTION: "주제는 1~40자, 선택지는 각각 1~30자로 입력해 주세요.",
     NOT_OPEN: "지금은 투표 시간이 아니에요.",
+    INVALID_VOTE: "투표할 수 없는 문제예요.",
     NO_PLAYER: "참가 정보를 찾을 수 없어요. 새로고침 후 다시 참가해 주세요.",
+    NO_QUESTIONS: "제출된 질문이 없어서 투표를 열 수 없어요.",
     BAD_KEY: "진행자 비밀번호가 달라요.",
     ADMIN_NOT_SET: "진행자 비밀번호가 아직 설정되지 않았어요. (balance.sql 맨 아래 안내)",
   };
@@ -396,6 +401,8 @@
     const key = Object.keys(BG_ERR).find((k) => m.includes(k));
     return key ? BG_ERR[key] : "연결이 불안정해요. 잠시 후 다시 시도해 주세요.";
   };
+  // 출제 점수: 표 차이 0~1 → 2점, 2 → 1점, 그 외 0점
+  const bgPoints = (res) => { const d = Math.abs(res.A - res.B); return d <= 1 ? 2 : d === 2 ? 1 : 0; };
 
   let bgData = null;
   let bgSig = "";
@@ -419,12 +426,14 @@
   function renderBalance() {
     const d = bgData;
     if (!d) return;
+    const QS = d.questions || [];
     const total = QS.length;
     const me = bgPlayer();
     const mine = d.mine || {};
-    const done = d.status === "closed" && d.revealed >= total && total > 0;
+    const done = d.status === "closed" && total > 0 && d.revealed >= total;
 
     $("bg-badge").textContent = d.status === "ready" ? "대기 중"
+      : d.status === "submit" ? "질문 제출 중"
       : d.status === "open" ? "투표 중"
       : done ? "결과 공개 완료"
       : d.revealed > 0 ? `결과 공개 중 ${d.revealed}/${total}` : "투표 마감 · 공개 대기";
@@ -436,27 +445,38 @@
     if (me) box.replaceChildren(el("span", {}, "✅ ", el("b", { textContent: me.name }), " 님으로 참가 중이에요"));
     $("bg-intro").hidden = d.status !== "ready" && !!me;
 
+    // 질문 내기 (제출 단계에서만)
+    const qform = $("bg-qform");
+    qform.hidden = !(d.status === "submit" && me);
+    if (!qform.hidden && d.myq && !qform.dataset.filled) {
+      $("bg-q-title").value = d.myq.title; $("bg-q-a").value = d.myq.a; $("bg-q-b").value = d.myq.b;
+      qform.dataset.filled = "1";
+    }
+    if (!me || d.status !== "submit") delete qform.dataset.filled;
+    $("bg-q-saved").textContent = d.myq ? "✅ 질문이 저장됐어요. 제출 시간 안에는 고쳐서 다시 저장할 수 있어요." : "";
+
     // 안내 줄
     const myCount = Object.keys(mine).length;
     $("bg-status").textContent =
-      d.status === "open" ? (me ? `🗳 투표 중 · 내 선택 ${myCount}/${total} · 참가 ${d.players}명 (마감 전에는 바꿀 수 있어요)` : "🗳 투표 중이에요. 위에서 이름을 입력해 참가하면 고를 수 있어요.")
-      : d.status === "closed" && d.revealed === 0 ? "투표가 마감됐어요. 곧 결과를 한 문제씩 공개해요!"
-      : d.status === "ready" ? `참가 ${d.players}명 · 진행자가 시작하면 문제가 나타나요.` : "";
+      d.status === "ready" ? `참가 ${d.players}/${MAX_PLAYERS}명 · 진행자가 시작하면 질문 제출이 열려요. (미리 질문을 낼 수는 없어요)`
+      : d.status === "submit" ? (me ? `✍ 질문 제출 중 · 제출 ${d.submitted}/${MAX_PLAYERS} · 누가 어떤 질문을 냈는지는 비공개예요` : "✍ 질문 제출 중이에요. 위에서 이름을 입력해 참가해 주세요.")
+      : d.status === "open" ? (me ? `🗳 투표 중 · 내 선택 ${myCount}/${total} · 마감 전에는 바꿀 수 있어요` : "🗳 투표 중이에요. 참가 인원이 가득 차 새로 참가할 수는 없어요.")
+      : d.status === "closed" && d.revealed === 0 ? "투표가 마감됐어요. 곧 결과와 출제자를 한 문제씩 공개해요!" : "";
 
-    // 문제 목록 (대기 중에는 숨김)
-    $("bg-list").replaceChildren(...(d.status === "ready" ? [] : QS.map((q, idx) => {
-      const n = idx + 1;
+    // 문제 목록 (투표·마감 단계에서만 서버가 내려줌)
+    $("bg-list").replaceChildren(...QS.map((q) => {
+      const n = q.q;
       const revealed = n <= d.revealed;
       const res = (d.results && d.results[n]) || { A: 0, B: 0 };
       const sum = res.A + res.B;
       const myChoice = mine[n];
+      const isMine = !!d.myq && d.myq.q === n;
       const buttons = ["A", "B"].map((c) => {
         const text = c === "A" ? q.a : q.b;
         const pct = sum ? Math.round((res[c] / sum) * 100) : 0;
-        const win = revealed && sum > 0 && res[c] >= res[c === "A" ? "B" : "A"];
         const b = el("button", {
           type: "button",
-          className: "bg-choice" + (myChoice === c ? " sel" : "") + (win ? " win" : ""),
+          className: "bg-choice" + (myChoice === c ? " sel" : "") + (revealed && sum > 0 && res[c] >= res[c === "A" ? "B" : "A"] ? " win" : ""),
           disabled: !(d.status === "open" && me),
         }, el("b", { textContent: c }), el("span", { textContent: text }));
         if (revealed) {
@@ -467,17 +487,19 @@
       });
       let resultLine = null;
       if (revealed) {
-        const scored = !!myChoice && res[myChoice] >= res[myChoice === "A" ? "B" : "A"];
-        resultLine = el("p", { className: "bg-result" + (scored ? " get" : ""), textContent:
-          !me ? "" : !myChoice ? "선택하지 않았어요" : scored ? (res.A === res.B ? "🤝 동률! +1점" : "🎉 다수파! +1점") : "소수파예요, 아쉬워요" });
+        const pts = bgPoints(res);
+        const author = (d.authors && d.authors[n]) || "?";
+        resultLine = el("p", { className: "bg-result" + (pts ? " get" : ""), textContent:
+          `🎤 출제자 ${author} · ${res.A}:${res.B} → ${pts === 2 ? "황금밸런스! +2점" : pts === 1 ? "+1점" : "0점"}` });
       } else if (d.status === "closed") {
         resultLine = el("p", { className: "bg-result", textContent: myChoice ? `내 선택: ${myChoice} · 공개 대기 중…` : "공개 대기 중…" });
       }
       return el("li", { className: "bg-q" },
-        el("p", { className: "bg-q-head" }, el("small", { textContent: `Q${n}` }), q.title),
+        el("p", { className: "bg-q-head" }, el("small", { textContent: `Q${n}` }), q.title,
+          isMine ? el("span", { className: "bg-own", textContent: "✍ 내가 낸 질문" }) : null),
         el("div", { className: "bg-choices" }, ...buttons),
         resultLine);
-    })));
+    }));
 
     // 점수판
     const showScores = d.revealed > 0 && d.scores.length > 0;
@@ -526,35 +548,58 @@
     }
   }
 
+  async function submitQuestion(e) {
+    e.preventDefault();
+    const me = bgPlayer();
+    if (!me || bgBusy) return;
+    const title = $("bg-q-title").value.trim(), a = $("bg-q-a").value.trim(), b = $("bg-q-b").value.trim();
+    if (!title || !a || !b) { toast("주제와 선택지 A·B를 모두 입력해 주세요"); return; }
+    bgBusy = true; $("bg-q-btn").disabled = true;
+    try {
+      const { error } = await sb.rpc("bg_submit", { p_token: me.token, p_title: title, p_a: a, p_b: b });
+      if (error) throw error;
+      toast("질문을 저장했어요 ✍");
+    } catch (err) {
+      toast(bgErrMsg(err));
+    } finally {
+      bgBusy = false; $("bg-q-btn").disabled = false;
+      bgSig = "";
+      await loadBalance().catch(() => {});
+    }
+  }
+
   // 진행자 메뉴 (주소 끝에 ?host 를 붙였을 때만 보임. 실제 권한은 서버의 진행자 비밀번호가 결정)
   function renderHostInfo() {
     if (!isHost || !bgData) return;
     const d = bgData;
+    const total = (d.questions || []).length;
     const next = d.revealed + 1;
-    const stat = { ready: "대기", open: "투표 중", closed: "마감" }[d.status];
+    const stat = { ready: "대기", submit: "질문 제출 중", open: "투표 중", closed: "마감" }[d.status];
     const votes = (n) => (d.progress && d.progress[n]) || 0;
     $("bg-host-info").textContent =
-      `상태 ${stat} · 공개 ${d.revealed}/${QS.length} · 참가 ${d.players}명` +
-      (d.status === "open" ? ` · 선택 합계 ${Object.values(d.progress || {}).reduce((a, b) => a + b, 0)}/${d.players * QS.length}` : "") +
-      (next <= QS.length ? ` · 다음 공개 Q${next} 선택 ${votes(next)}/${d.players}명` : "");
+      `상태 ${stat} · 참가 ${d.players}/${MAX_PLAYERS}명 · 질문 제출 ${d.submitted}/${MAX_PLAYERS}` +
+      (total ? ` · 공개 ${d.revealed}/${total}` : "") +
+      (d.status === "open" ? ` · 투표 합계 ${Object.values(d.progress || {}).reduce((a, b) => a + b, 0)}/${d.players * total}` : "") +
+      (total && next <= total ? ` · 다음 공개 Q${next} 투표 ${votes(next)}/${d.players}명` : "");
   }
 
   async function hostAction(kind) {
     const key = $("bg-key").value;
     if (!key) { toast("진행자 비밀번호를 입력해 주세요"); $("bg-key").focus(); return; }
     if (!bgData || bgBusy) return;
-    const total = QS.length;
+    const total = (bgData.questions || []).length;
     let args;
-    if (kind === "open") args = { p_status: "open" };
+    if (kind === "submit") args = { p_status: "submit" };
+    else if (kind === "open") args = { p_status: "open" };
     else if (kind === "close") args = { p_status: "closed" };
     else if (kind === "next") args = { p_status: "closed", p_revealed: Math.min(total, bgData.revealed + 1) };
     else if (kind === "ready") args = { p_status: "ready", p_revealed: 0 };
     else if (kind === "prev") args = { p_revealed: Math.max(0, bgData.revealed - 1) };
     bgBusy = true;
     try {
-      if (kind === "ready" && !window.confirm("대기 상태로 되돌릴까요? (참가자·투표는 남고, 문제가 다시 숨겨져요)")) return;
+      if (kind === "ready" && !window.confirm("대기 상태로 되돌릴까요? (참가자·질문·투표는 남고, 문제가 다시 숨겨져요)")) return;
       if (kind === "reset") {
-        if (!window.confirm("참가자와 투표를 전부 지우고 처음 상태로 되돌릴까요?")) return;
+        if (!window.confirm("참가자·질문·투표를 전부 지우고 처음 상태로 되돌릴까요?")) return;
         const { error } = await sb.rpc("bg_admin_reset", { p_key: key });
         if (error) throw error;
         store.del("bg-player");
@@ -597,6 +642,7 @@
   $("chat-form").addEventListener("submit", postChat);
   loadChat().catch(() => {});
   $("bg-join").addEventListener("submit", joinBalance);
+  $("bg-qform").addEventListener("submit", submitQuestion);
   if (isHost) {
     $("bg-host").hidden = false;
     $("bg-host").open = true;
