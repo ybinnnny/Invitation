@@ -294,3 +294,45 @@ main {
 }
 
 .foot { text-align: center; color: #9aa0bd; font-size: 12px; padding: 8px 16px 40px; }
+
+/* GAME 3 밸런스 게임 */
+.bg-intro { margin: 0 0 12px; }
+.bg-h3 { font-size: 16px; margin: 18px 0 8px; }
+.bg-join .btn.block { margin-top: 0; }
+.bg-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 12px; }
+.bg-q { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+.bg-q-head { margin: 0 0 8px; font-weight: 700; }
+.bg-q-head small { color: var(--gold); letter-spacing: .15em; margin-right: 6px; }
+.bg-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bg-choice {
+  position: relative; overflow: hidden;
+  min-height: 64px; padding: 8px 10px; border-radius: 12px;
+  border: 2px solid var(--line); background: #fff; color: var(--ink);
+  font: inherit; font-size: 14px; line-height: 1.35; text-align: center; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  -webkit-tap-highlight-color: transparent;
+}
+.bg-choice b { font-size: 12px; color: var(--muted); }
+.bg-choice:disabled { cursor: default; }
+.bg-choice.sel { border-color: var(--red); background: #fdf0ee; }
+.bg-choice.sel b { color: var(--red); }
+.bg-choice .bar {
+  position: absolute; left: 0; bottom: 0; height: 5px; width: var(--w, 0%);
+  background: var(--line); transition: width .6s ease;
+}
+.bg-choice.win { border-color: var(--green); background: #eaf5ef; }
+.bg-choice.win .bar { background: var(--green); }
+.bg-choice .pct { font-weight: 700; font-size: 15px; }
+.bg-result { margin: 8px 0 0; font-size: 13px; text-align: center; color: var(--muted); }
+.bg-result.get { color: var(--green); font-weight: 700; }
+.bg-scores { margin: 0 0 8px; padding: 0; list-style: none; display: grid; gap: 4px; }
+.bg-scores li {
+  display: flex; justify-content: space-between; gap: 8px;
+  padding: 6px 10px; border-radius: 8px; background: #f6f1e8; font-size: 14px;
+}
+.bg-scores li.me { background: #eaf5ef; color: #1f5a40; font-weight: 700; }
+.bg-scores li span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bg-host { margin-top: 18px; border: 1px dashed var(--line); border-radius: 12px; padding: 10px 12px; }
+.bg-host summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.bg-host .field { margin-top: 10px; }
+.bg-host .btn-row { margin-bottom: 8px; }

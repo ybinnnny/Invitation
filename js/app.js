@@ -103,7 +103,7 @@
   }) : null;
 
   function showNotConfigured() {
-    for (const k of ["teams", "photos", "chat"]) {
+    for (const k of ["teams", "photos", "chat", "balance"]) {
       const n = $(`${k}-notice`);
       n.textContent = window.supabase
         ? "아직 서버 설정 전이에요. (js/config.js 의 supabase url·key 를 입력하세요)"
@@ -379,11 +379,203 @@
     }
   }
 
+  // ── GAME 3 밸런스 게임 ───────────────────────────────────────
+  // 서버(balance.sql)는 공개 전 문제의 표 수를 내보내지 않는다. 점수는 서버가 계산한다.
+  const QS = CFG.balance || [];
+  const BG_ERR = {
+    INVALID_NAME: "이름을 1~20자로 입력해 주세요.",
+    NAME_TAKEN: "이미 같은 이름으로 참가한 사람이 있어요. 다른 이름(예: 성까지)으로 입력해 주세요.",
+    GAME_FULL: "참가 인원이 가득 찼어요. 주최자에게 알려주세요.",
+    NOT_OPEN: "지금은 투표 시간이 아니에요.",
+    NO_PLAYER: "참가 정보를 찾을 수 없어요. 새로고침 후 다시 참가해 주세요.",
+    BAD_KEY: "진행자 비밀번호가 달라요.",
+    ADMIN_NOT_SET: "진행자 비밀번호가 아직 설정되지 않았어요. (balance.sql 맨 아래 안내)",
+  };
+  const bgErrMsg = (e) => {
+    const m = String(e?.message || e || "");
+    const key = Object.keys(BG_ERR).find((k) => m.includes(k));
+    return key ? BG_ERR[key] : "연결이 불안정해요. 잠시 후 다시 시도해 주세요.";
+  };
+
+  let bgData = null;
+  let bgSig = "";
+  let bgBusy = false;
+  const bgPlayer = () => store.get("bg-player"); // { token, name }
+  const isHost = new URLSearchParams(location.search).has("host");
+
+  async function loadBalance() {
+    const mine = bgPlayer();
+    const { data, error } = await sb.rpc("bg_overview", { p_token: mine ? mine.token : null });
+    if (error) { $("balance-notice").textContent = "밸런스 게임을 불러오지 못했어요. 새로고침해 주세요."; $("balance-notice").hidden = false; throw error; }
+    $("balance-notice").hidden = true;
+    if (mine && !data.me) store.del("bg-player"); // 서버가 초기화된 경우
+    bgData = data;
+    $("bg-synced").textContent = "마지막 갱신 " + new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "numeric", minute: "2-digit", second: "2-digit" }).format(new Date());
+    const sig = JSON.stringify(data) + (bgPlayer()?.token || "");
+    if (sig !== bgSig) { bgSig = sig; renderBalance(); }
+    renderHostInfo();
+  }
+
+  function renderBalance() {
+    const d = bgData;
+    if (!d) return;
+    const total = QS.length;
+    const me = bgPlayer();
+    const mine = d.mine || {};
+    const done = d.status === "closed" && d.revealed >= total && total > 0;
+
+    $("bg-badge").textContent = d.status === "ready" ? "대기 중"
+      : d.status === "open" ? "투표 중"
+      : done ? "결과 공개 완료"
+      : d.revealed > 0 ? `결과 공개 중 ${d.revealed}/${total}` : "투표 마감 · 공개 대기";
+
+    // 참가 영역
+    $("bg-join").hidden = !!me;
+    const box = $("bg-me");
+    box.hidden = !me;
+    if (me) box.replaceChildren(el("span", {}, "✅ ", el("b", { textContent: me.name }), " 님으로 참가 중이에요"));
+    $("bg-intro").hidden = d.status !== "ready" && !!me;
+
+    // 안내 줄
+    const myCount = Object.keys(mine).length;
+    $("bg-status").textContent =
+      d.status === "open" ? (me ? `🗳 투표 중 · 내 선택 ${myCount}/${total} · 참가 ${d.players}명 (마감 전에는 바꿀 수 있어요)` : "🗳 투표 중이에요. 위에서 이름을 입력해 참가하면 고를 수 있어요.")
+      : d.status === "closed" && d.revealed === 0 ? "투표가 마감됐어요. 곧 결과를 한 문제씩 공개해요!"
+      : d.status === "ready" ? `참가 ${d.players}명 · 진행자가 시작하면 문제가 나타나요.` : "";
+
+    // 문제 목록 (대기 중에는 숨김)
+    $("bg-list").replaceChildren(...(d.status === "ready" ? [] : QS.map((q, idx) => {
+      const n = idx + 1;
+      const revealed = n <= d.revealed;
+      const res = (d.results && d.results[n]) || { A: 0, B: 0 };
+      const sum = res.A + res.B;
+      const myChoice = mine[n];
+      const buttons = ["A", "B"].map((c) => {
+        const text = c === "A" ? q.a : q.b;
+        const pct = sum ? Math.round((res[c] / sum) * 100) : 0;
+        const win = revealed && sum > 0 && res[c] >= res[c === "A" ? "B" : "A"];
+        const b = el("button", {
+          type: "button",
+          className: "bg-choice" + (myChoice === c ? " sel" : "") + (win ? " win" : ""),
+          disabled: !(d.status === "open" && me),
+        }, el("b", { textContent: c }), el("span", { textContent: text }));
+        if (revealed) {
+          b.append(el("span", { className: "pct", textContent: `${pct}% (${res[c]}명)` }), el("i", { className: "bar", style: `--w:${pct}%` }));
+        }
+        b.addEventListener("click", () => castVote(n, c));
+        return b;
+      });
+      let resultLine = null;
+      if (revealed) {
+        const scored = !!myChoice && res[myChoice] >= res[myChoice === "A" ? "B" : "A"];
+        resultLine = el("p", { className: "bg-result" + (scored ? " get" : ""), textContent:
+          !me ? "" : !myChoice ? "선택하지 않았어요" : scored ? (res.A === res.B ? "🤝 동률! +1점" : "🎉 다수파! +1점") : "소수파예요, 아쉬워요" });
+      } else if (d.status === "closed") {
+        resultLine = el("p", { className: "bg-result", textContent: myChoice ? `내 선택: ${myChoice} · 공개 대기 중…` : "공개 대기 중…" });
+      }
+      return el("li", { className: "bg-q" },
+        el("p", { className: "bg-q-head" }, el("small", { textContent: `Q${n}` }), q.title),
+        el("div", { className: "bg-choices" }, ...buttons),
+        resultLine);
+    })));
+
+    // 점수판
+    const showScores = d.revealed > 0 && d.scores.length > 0;
+    $("bg-score-box").hidden = !showScores;
+    if (showScores) {
+      $("bg-scores").replaceChildren(...d.scores.map((s, i) =>
+        el("li", { className: me && s.name === me.name ? "me" : "" },
+          el("span", { textContent: `${i + 1}. ${s.name}` }), el("span", { textContent: `${s.score}점` }))));
+    }
+  }
+
+  async function castVote(q, choice) {
+    const me = bgPlayer();
+    if (!me || !bgData || bgData.status !== "open") return;
+    if (bgData.mine[q] === choice) return;
+    bgData.mine[q] = choice;           // 먼저 화면에 반영
+    bgSig = ""; renderBalance();
+    try {
+      const { error } = await sb.rpc("bg_vote", { p_token: me.token, p_q: q, p_choice: choice });
+      if (error) throw error;
+    } catch (e) {
+      toast(bgErrMsg(e));
+    } finally {
+      await loadBalance().catch(() => {});   // 서버 기준으로 다시 맞춤
+    }
+  }
+
+  async function joinBalance(e) {
+    e.preventDefault();
+    if (bgBusy) return;
+    const name = $("bg-name").value.trim();
+    if (!name) { toast("이름을 먼저 입력해 주세요"); $("bg-name").focus(); return; }
+    bgBusy = true; $("bg-join-btn").disabled = true;
+    try {
+      const { data, error } = await sb.rpc("bg_join", { p_name: name });
+      if (error) throw error;
+      store.set("bg-player", { token: data.token, name: data.name });
+      store.set("bg-name", name);
+      toast("참가 완료! 🎮");
+    } catch (err) {
+      toast(bgErrMsg(err));
+    } finally {
+      bgBusy = false; $("bg-join-btn").disabled = false;
+      bgSig = "";
+      await loadBalance().catch(() => {});
+    }
+  }
+
+  // 진행자 메뉴 (주소 끝에 ?host 를 붙였을 때만 보임. 실제 권한은 서버의 진행자 비밀번호가 결정)
+  function renderHostInfo() {
+    if (!isHost || !bgData) return;
+    const d = bgData;
+    const next = d.revealed + 1;
+    const stat = { ready: "대기", open: "투표 중", closed: "마감" }[d.status];
+    const votes = (n) => (d.progress && d.progress[n]) || 0;
+    $("bg-host-info").textContent =
+      `상태 ${stat} · 공개 ${d.revealed}/${QS.length} · 참가 ${d.players}명` +
+      (d.status === "open" ? ` · 선택 합계 ${Object.values(d.progress || {}).reduce((a, b) => a + b, 0)}/${d.players * QS.length}` : "") +
+      (next <= QS.length ? ` · 다음 공개 Q${next} 선택 ${votes(next)}/${d.players}명` : "");
+  }
+
+  async function hostAction(kind) {
+    const key = $("bg-key").value;
+    if (!key) { toast("진행자 비밀번호를 입력해 주세요"); $("bg-key").focus(); return; }
+    if (!bgData || bgBusy) return;
+    const total = QS.length;
+    let args;
+    if (kind === "open") args = { p_status: "open" };
+    else if (kind === "close") args = { p_status: "closed" };
+    else if (kind === "next") args = { p_status: "closed", p_revealed: Math.min(total, bgData.revealed + 1) };
+    else if (kind === "prev") args = { p_revealed: Math.max(0, bgData.revealed - 1) };
+    bgBusy = true;
+    try {
+      if (kind === "reset") {
+        if (!window.confirm("참가자와 투표를 전부 지우고 처음 상태로 되돌릴까요?")) return;
+        const { error } = await sb.rpc("bg_admin_reset", { p_key: key });
+        if (error) throw error;
+        store.del("bg-player");
+        toast("초기화했어요");
+      } else {
+        const { error } = await sb.rpc("bg_admin_set", { p_key: key, ...args });
+        if (error) throw error;
+      }
+    } catch (e) {
+      toast(bgErrMsg(e));
+    } finally {
+      bgBusy = false;
+      bgSig = "";
+      await loadBalance().catch(() => {});
+    }
+  }
+
   // ── 시작 ─────────────────────────────────────────────────────
   renderStatic();
   setupModals();
   $("my-name").value = store.get("my-name") || "";
   $("chat-name").value = store.get("chat-name") || "";
+  $("bg-name").value = store.get("bg-name") || store.get("my-name") || "";
   $("chat-text").addEventListener("input", () => {
     $("chat-count").textContent = `${$("chat-text").value.length} / 300`;
   });
@@ -401,6 +593,15 @@
   loadGallery();
   $("chat-form").addEventListener("submit", postChat);
   loadChat().catch(() => {});
+  $("bg-join").addEventListener("submit", joinBalance);
+  if (isHost) {
+    $("bg-host").hidden = false;
+    $("bg-host").open = true;
+    $("bg-host").querySelectorAll("[data-bg]").forEach((b) => b.addEventListener("click", () => hostAction(b.dataset.bg)));
+  }
+  loadBalance().catch(() => {});
+  // 게임이 진행 중일 때만 5초마다 갱신 (대기 중에는 아래 15초 갱신으로 충분)
+  setInterval(() => { if (bgData && bgData.status !== "ready" && !bgBusy) loadBalance().catch(() => {}); }, 5000);
 
   // 다른 사람의 선택·글을 반영하기 위해 15초마다 새로고침한다.
   // 카카오톡 같은 앱 안 브라우저는 복귀해도 visibilitychange 가 안 오거나 document.hidden 이 틀릴 수 있어,
@@ -408,6 +609,7 @@
   const refreshLive = () => {
     if (!busy) loadSlots().catch(() => {});
     if (!chatBusy) loadChat().catch(() => {});
+    if (!bgBusy) loadBalance().catch(() => {});
   };
   let lastRefresh = 0;
   const refreshAll = () => {
@@ -427,7 +629,7 @@
     const btn = $("chat-refresh");
     btn.disabled = true;
     try {
-      await Promise.all([loadSlots(), loadChat(), loadGallery()]);
+      await Promise.all([loadSlots(), loadChat(), loadGallery(), loadBalance()]);
       toast("최신 내용을 불러왔어요");
     } catch {
       toast("불러오지 못했어요. 잠시 후 다시 시도해 주세요");

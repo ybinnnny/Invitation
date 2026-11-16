@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261109b">
+  <link rel="stylesheet" href="css/style.css?v=20261116a">
 </head>
 <body>
   <div class="snow" aria-hidden="true"></div>
@@ -100,11 +100,64 @@
           <button class="btn ghost" type="button" data-open="game-modal">📖 게임 소개 보기</button>
         </li>
         <li>
+          <p class="prog-kicker">GAME 3</p>
+          <h3>밸런스 게임</h3>
+          <p class="small">여러 주제에서 A·B 중 하나를 폰으로 고르고, 결과는 마지막에 한꺼번에 공개! <b>내가 고른 쪽이 더 많은 선택을 받으면 1점</b>이에요. 다수파가 되는 눈치 싸움!</p>
+          <a class="btn ghost" href="#balance">🎮 참가 화면으로 가기</a>
+        </li>
+        <li>
           <p class="prog-kicker">FINALE</p>
           <h3>경품 추첨 · 핀볼</h3>
           <p class="small">게임에서 <b>개인별로 얻은 점수만큼 핀볼이 추가</b>돼요. 핀볼 추첨으로 경품 고르는 순서를 정해요. 점수가 많을수록 앞 순서가 될 확률이 높아져요!</p>
         </li>
       </ol>
+    </section>
+
+    <section id="balance" class="card">
+      <h2>GAME 3 밸런스 게임 <span class="badge" id="bg-badge">대기 중</span></h2>
+      <div class="notice" id="balance-notice" hidden></div>
+      <div id="balance-body">
+        <p class="small bg-intro" id="bg-intro">행사 당일, 진행자가 시작하면 여기서 A·B를 골라요. 미리 이름을 입력해 참가해 두세요!<br>선택 결과는 마감 후 한 문제씩 공개돼요.</p>
+        <form class="bg-join" id="bg-join" autocomplete="off">
+          <label class="field">
+            <span>내 이름 (게임에서 보이는 이름)</span>
+            <input type="text" id="bg-name" maxlength="20" placeholder="예: 김선녀">
+          </label>
+          <button class="btn primary block" type="submit" id="bg-join-btn">참가하기</button>
+        </form>
+        <div class="mine" id="bg-me" hidden></div>
+        <p class="status" id="bg-status" role="status" aria-live="polite"></p>
+        <ol class="bg-list" id="bg-list"></ol>
+        <div id="bg-score-box" hidden>
+          <h3 class="bg-h3">🏆 점수</h3>
+          <ol class="bg-scores" id="bg-scores"></ol>
+          <p class="muted small">점수만큼 경품 추첨 핀볼이 늘어나요!</p>
+        </div>
+        <div class="chat-tools">
+          <span class="muted small" id="bg-synced"></span>
+          <button class="btn ghost" type="button" id="bg-refresh">🔄 새로고침</button>
+        </div>
+
+        <details class="bg-host" id="bg-host" hidden>
+          <summary>진행자 메뉴</summary>
+          <label class="field">
+            <span>진행자 비밀번호</span>
+            <input type="password" id="bg-key" autocomplete="off" placeholder="Supabase에 설정한 비밀번호">
+          </label>
+          <div class="btn-row">
+            <button class="btn" type="button" data-bg="open">투표 열기</button>
+            <button class="btn" type="button" data-bg="close">투표 마감</button>
+          </div>
+          <div class="btn-row">
+            <button class="btn primary" type="button" data-bg="next">▶ 다음 결과 공개</button>
+            <button class="btn" type="button" data-bg="prev">◀ 공개 취소</button>
+          </div>
+          <div class="btn-row">
+            <button class="btn ghost" type="button" data-bg="reset">전부 초기화</button>
+          </div>
+          <p class="muted small" id="bg-host-info"></p>
+        </details>
+      </div>
     </section>
 
     <section id="photos" class="card">
@@ -223,7 +276,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=20261109b"></script>
-  <script src="js/app.js?v=20261109b"></script>
+  <script src="js/config.js?v=20261116a"></script>
+  <script src="js/app.js?v=20261116a"></script>
 </body>
 </html>

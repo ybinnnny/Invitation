@@ -15,7 +15,14 @@ img/                게임 소개 팝업의 예시 이미지 (360px)
 og.jpg              카카오톡 공유 썸네일 (1200×630)
 supabase/schema.sql 조 선택 + 사진 SQL (Supabase SQL Editor 에서 먼저 실행)
 supabase/chat.sql   수다공간(자유 게시판) SQL (schema.sql 다음에 실행)
+supabase/balance.sql GAME 3 밸런스 게임 SQL (진행자 비밀번호는 파일 맨 아래 안내대로 따로 설정)
 ```
+
+## GAME 3 밸런스 게임
+
+- 문제는 `js/config.js` 의 `balance` 배열(`title`, `a`, `b`). 행사 중에는 순서·개수를 바꾸지 않습니다. (표가 문제 번호로 저장됨)
+- 진행자 화면은 주소 끝에 `?host` 를 붙여 열고, Supabase 에 설정한 진행자 비밀번호를 입력합니다. 투표 열기 → 마감 → 다음 결과 공개(한 문제씩).
+- 공개 전 문제의 표 수는 서버가 내보내지 않습니다. 점수(다수파 1점, 동률은 양쪽 모두 1점)도 서버가 계산합니다.
 
 ## 고치는 곳
 
