@@ -548,9 +548,11 @@
     if (kind === "open") args = { p_status: "open" };
     else if (kind === "close") args = { p_status: "closed" };
     else if (kind === "next") args = { p_status: "closed", p_revealed: Math.min(total, bgData.revealed + 1) };
+    else if (kind === "ready") args = { p_status: "ready", p_revealed: 0 };
     else if (kind === "prev") args = { p_revealed: Math.max(0, bgData.revealed - 1) };
     bgBusy = true;
     try {
+      if (kind === "ready" && !window.confirm("대기 상태로 되돌릴까요? (참가자·투표는 남고, 문제가 다시 숨겨져요)")) return;
       if (kind === "reset") {
         if (!window.confirm("참가자와 투표를 전부 지우고 처음 상태로 되돌릴까요?")) return;
         const { error } = await sb.rpc("bg_admin_reset", { p_key: key });
