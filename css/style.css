@@ -336,3 +336,6 @@ main {
 .bg-host summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .bg-host .field { margin-top: 10px; }
 .bg-host .btn-row { margin-bottom: 8px; }
+.bg-rules { margin-top: 6px; }
+.bg-rules h3 { font-size: 15px; margin: 18px 0 6px; color: var(--red); }
+.bg-rules .dots { margin-top: 6px; }

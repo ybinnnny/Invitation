@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261116c">
+  <link rel="stylesheet" href="css/style.css?v=20261116d">
 </head>
 <body>
   <div class="snow" aria-hidden="true"></div>
@@ -250,7 +250,35 @@
             <button class="btn ghost" type="button" id="bg-refresh">🔄 새로고침</button>
           </div>
 
-          <details class="bg-host" id="bg-host" hidden>
+          <div class="bg-rules">
+          <h3>게임 룰</h3>
+          <p class="muted small">다수파가 되어라! 내가 고른 쪽이 더 많은 선택을 받으면 점수 획득</p>
+
+          <h3>한눈에 보기</h3>
+          <ul class="dots">
+            <li><b>이름 입력 후 참가</b> — 각자 폰으로 참가해요.</li>
+            <li><b>A·B 선택</b> — 진행자가 투표를 열면 문제마다 A 또는 B를 골라요. 마감 전에는 바꿀 수 있어요.</li>
+            <li><b>결과는 마지막에 공개</b> — 모두 고른 뒤 진행자가 문제를 한 문제씩 공개해요. 공개 전에는 아무도 선택 비중을 볼 수 없어요.</li>
+          </ul>
+
+          <h3>점수</h3>
+          <ul class="dots">
+            <li><b>1점</b> — 내가 고른 쪽이 더 많은 선택을 받았을 때 (문제당 최대 1점)</li>
+            <li><b>동률</b> — 같은 수라면 양쪽 모두 1점이에요.</li>
+            <li><b>0점</b> — 소수파이거나 선택하지 않은 문제예요. 감점은 없어요.</li>
+            <li><b>눈치 싸움</b> — 내 취향보다 "다들 뭘 고를까?"를 맞히는 게 전략!</li>
+          </ul>
+          <p class="small">모은 점수만큼 경품 추첨 핀볼이 늘어나요!</p>
+
+          <h3>이건 알아두세요</h3>
+          <ul class="dots">
+            <li>선택하지 않은 문제는 0점이에요. 마감 전에 모두 골라주세요.</li>
+            <li>투표가 마감되면 더 이상 바꿀 수 없어요.</li>
+            <li>내 폰이 아닌 다른 기기로 열면 선택 기록이 없어요. 처음 참가한 폰으로 계속 진행해 주세요.</li>
+          </ul>
+        </div>
+
+        <details class="bg-host" id="bg-host" hidden>
             <summary>진행자 메뉴</summary>
             <label class="field">
               <span>진행자 비밀번호</span>
@@ -283,7 +311,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=20261116c"></script>
-  <script src="js/app.js?v=20261116c"></script>
+  <script src="js/config.js?v=20261116d"></script>
+  <script src="js/app.js?v=20261116d"></script>
 </body>
 </html>
