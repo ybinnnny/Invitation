@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261116h">
+  <link rel="stylesheet" href="css/style.css?v=20261116i">
 </head>
 <body>
   <div class="snow" aria-hidden="true"></div>
@@ -306,6 +306,15 @@
               <button class="btn" type="button" data-bg="wprev">◀ 이전 질문</button>
               <button class="btn primary" type="button" data-bg="wnext">다음 질문 ▶</button>
             </div>
+            <button class="btn ghost" type="button" id="bg-wedit-load">워밍업 질문 목록 보기·수정</button>
+            <div class="bg-wedit" id="bg-wedit" hidden>
+              <ol class="bg-wedit-list" id="bg-wedit-list"></ol>
+              <div class="btn-row">
+                <button class="btn" type="button" id="bg-wedit-add">+ 질문 추가</button>
+                <button class="btn primary" type="button" id="bg-wedit-save">저장</button>
+              </div>
+              <p class="muted small">저장하면 목록 전체가 바뀌어요. 주제는 비워도 되고, 워밍업 진행 중에 순서·개수를 바꾸면 투표가 엉킬 수 있어요.</p>
+            </div>
             <p class="muted small">3-2 황금밸런스</p>
             <div class="btn-row">
               <button class="btn" type="button" data-bg="submit">질문 제출 열기</button>
@@ -335,7 +344,7 @@
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
-  <script src="js/config.js?v=20261116h"></script>
-  <script src="js/app.js?v=20261116h"></script>
+  <script src="js/config.js?v=20261116i"></script>
+  <script src="js/app.js?v=20261116i"></script>
 </body>
 </html>

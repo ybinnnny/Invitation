@@ -389,6 +389,7 @@
     GAME_FULL: "참가 인원(8명)이 가득 찼어요.",
     NOT_WARM: "지금 보이는 워밍업 문제가 아니에요. 화면이 곧 바뀌어요.",
     NOT_SUBMIT: "지금은 질문을 낼 수 있는 시간이 아니에요.",
+    INVALID_LIST: "질문 목록이 올바르지 않아요. 선택지 A·B는 비울 수 없고 각각 60자 이하, 주제는 40자 이하예요.",
     INVALID_QUESTION: "주제는 1~40자, 선택지는 각각 1~30자로 입력해 주세요.",
     NOT_OPEN: "지금은 투표 시간이 아니에요.",
     INVALID_VOTE: "투표할 수 없는 문제예요.",
@@ -404,6 +405,11 @@
   };
   // 출제 점수: 표 차이 0~1 → 2점, 2 → 1점, 그 외 0점
   const bgPoints = (res) => { const d = Math.abs(res.A - res.B); return d <= 1 ? 2 : d === 2 ? 1 : 0; };
+
+  // 3-1 워밍업 질문: 관리자가 저장한 목록(서버)이 있으면 그것, 없으면 config.js 기본값
+  const warmTotal = (d) => d.warm_n || (CFG.balanceWarm || []).length;
+  const warmCur = (d) => d.warm_cur ? [d.warm_cur.a, d.warm_cur.b, d.warm_cur.topic]
+    : d.warm_n ? null : (CFG.balanceWarm || [])[d.warm_q - 1] || null;
 
   let bgData = null;
   let bgSig = "";
@@ -443,9 +449,8 @@
     const mine = d.mine || {};
     const done = d.status === "closed" && total > 0 && d.revealed >= total;
 
-    const WARM = CFG.balanceWarm || [];
     $("bg-badge").textContent = d.status === "ready" ? "대기 중"
-      : d.status === "warm" ? `3-1 워밍업 ${d.warm_q}/${WARM.length}`
+      : d.status === "warm" ? `3-1 워밍업 ${d.warm_q}/${warmTotal(d)}`
       : d.status === "submit" ? "3-2 질문 제출 중"
       : d.status === "open" ? "투표 중"
       : done ? "결과 공개 완료"
@@ -532,9 +537,8 @@
     const box = $("bg-warm");
     box.hidden = d.status !== "warm";
     if (box.hidden) return;
-    const W = CFG.balanceWarm || [];
     const n = d.warm_q;
-    const w = W[n - 1];
+    const w = warmCur(d);
     if (!w) { box.replaceChildren(el("p", { className: "muted", textContent: "곧 첫 질문이 나와요!" })); return; }
     const res = d.warm || { A: 0, B: 0 };
     const sum = res.A + res.B;
@@ -550,7 +554,7 @@
       return b;
     });
     box.replaceChildren(
-      el("p", { className: "bg-q-head" }, el("small", { textContent: `3-1 · Q${n}/${W.length}` }), w[2]),
+      el("p", { className: "bg-q-head" }, el("small", { textContent: `3-1 · Q${n}/${warmTotal(d)}` }), w[2]),
       el("div", { className: "bg-choices" }, ...choices),
       el("p", { className: "bg-result", textContent: `투표 ${sum}/${d.players}명 · ${d.warm_mine ? "선택 완료 · 바꿀 수 있어요" : "하나를 골라주세요"}` }));
   }
@@ -638,10 +642,65 @@
     const votes = (n) => (d.progress && d.progress[n]) || 0;
     $("bg-host-info").textContent =
       `상태 ${stat} · 참가 ${d.players}/${MAX_PLAYERS}명 · 질문 제출 ${d.submitted}/${MAX_PLAYERS}` +
-      (d.status === "warm" ? ` · 워밍업 Q${d.warm_q}/${(CFG.balanceWarm || []).length} 투표 ${(d.warm?.A || 0) + (d.warm?.B || 0)}/${d.players}명` : "") +
+      (d.status === "warm" ? ` · 워밍업 Q${d.warm_q}/${warmTotal(d)} 투표 ${(d.warm?.A || 0) + (d.warm?.B || 0)}/${d.players}명` : "") +
       (total ? ` · 공개 ${d.revealed}/${total}` : "") +
       (d.status === "open" ? ` · 투표 합계 ${Object.values(d.progress || {}).reduce((a, b) => a + b, 0)}/${d.players * total}` : "") +
       (total && next <= total ? ` · 다음 공개 Q${next} 투표 ${votes(next)}/${d.players}명` : "");
+  }
+
+  // ── 관리자: 3-1 워밍업 질문 목록 보기·수정 ──────────────────
+  let wEdit = []; // [{ topic, a, b }]
+  const adminKey = () => $("bg-key").value;
+
+  function renderWarmEditor() {
+    const list = $("bg-wedit-list");
+    list.replaceChildren(...wEdit.map((it, i) => {
+      const field = (key, ph, max) => {
+        const inp = el("input", { type: "text", placeholder: ph, maxLength: max, value: it[key] });
+        inp.addEventListener("input", () => { it[key] = inp.value; });
+        return inp;
+      };
+      const btn = (label, fn, disabled) => {
+        const b = el("button", { type: "button", className: "btn ghost", textContent: label, disabled: !!disabled });
+        b.addEventListener("click", fn);
+        return b;
+      };
+      const move = (d) => () => { const j = i + d; [wEdit[i], wEdit[j]] = [wEdit[j], wEdit[i]]; renderWarmEditor(); };
+      return el("li", {},
+        el("div", { className: "bg-wedit-head" }, el("span", { textContent: `Q${i + 1}` }),
+          el("span", {}, btn("↑", move(-1), i === 0), btn("↓", move(1), i === wEdit.length - 1),
+            btn("✕", () => { wEdit.splice(i, 1); renderWarmEditor(); }))),
+        field("topic", "주제 (선택)", 40), field("a", "A 선택지", 60), field("b", "B 선택지", 60));
+    }));
+  }
+
+  async function loadWarmEditor() {
+    if (!adminKey()) { toast("관리자 비밀번호를 입력해 주세요"); $("bg-key").focus(); return; }
+    try {
+      const { data, error } = await sb.rpc("bg_admin_warm_list", { p_key: adminKey() });
+      if (error) throw error;
+      const base = data && data.length ? data : (CFG.balanceWarm || []).map(([a, b, topic]) => ({ a, b, topic }));
+      wEdit = base.map((x) => ({ topic: x.topic || "", a: x.a, b: x.b }));
+      renderWarmEditor();
+      $("bg-wedit").hidden = false;
+      toast(data && data.length ? `질문 ${data.length}개를 불러왔어요` : "아직 저장된 목록이 없어 기본 질문을 보여줘요");
+    } catch (e) { toast(bgErrMsg(e)); }
+  }
+
+  async function saveWarmEditor() {
+    if (!wEdit.length) { toast("질문이 하나도 없어요"); return; }
+    const bad = wEdit.findIndex((x) => !x.a.trim() || !x.b.trim());
+    if (bad >= 0) { toast(`Q${bad + 1}: 선택지 A·B를 모두 입력해 주세요`); return; }
+    if (bgData && bgData.status === "warm" && !window.confirm("워밍업 진행 중이에요. 저장하면 지금 보이는 질문이 바뀔 수 있어요. 저장할까요?")) return;
+    try {
+      const payload = wEdit.map((x) => ({ a: x.a.trim(), b: x.b.trim(), topic: x.topic.trim() }));
+      const { data, error } = await sb.rpc("bg_admin_warm_save", { p_key: adminKey(), p_list: payload });
+      if (error) throw error;
+      wEdit = data.map((x) => ({ topic: x.topic || "", a: x.a, b: x.b }));
+      renderWarmEditor();
+      toast(`✅ 워밍업 질문 ${data.length}개를 저장했어요`);
+      bgSig = ""; await loadBalance().catch(() => {});
+    } catch (e) { toast(bgErrMsg(e)); }
   }
 
   async function hostAction(kind) {
@@ -649,7 +708,7 @@
     if (!key) { toast("관리자 비밀번호를 입력해 주세요"); $("bg-key").focus(); return; }
     if (!bgData || bgBusy) return;
     const total = (bgData.questions || []).length;
-    const WN = (CFG.balanceWarm || []).length;
+    const WN = warmTotal(bgData);
     if ((kind === "wnext" || kind === "wprev") && bgData.status !== "warm") { toast("워밍업 중에만 쓸 수 있어요 (먼저 워밍업 시작)"); return; }
     if (kind === "wnext" && bgData.warm_q >= WN) { toast("마지막 워밍업 질문이에요. 다음은 '질문 제출 열기'예요"); return; }
     if (kind === "wprev" && bgData.warm_q <= 1) { toast("첫 번째 질문이에요"); return; }
@@ -727,6 +786,9 @@
   if (isHost) {
     $("bg-host").hidden = false;
     $("bg-host").open = true;
+    $("bg-wedit-load").addEventListener("click", loadWarmEditor);
+    $("bg-wedit-add").addEventListener("click", () => { wEdit.push({ topic: "", a: "", b: "" }); renderWarmEditor(); });
+    $("bg-wedit-save").addEventListener("click", saveWarmEditor);
     $("bg-host").querySelectorAll("[data-bg]").forEach((b) => b.addEventListener("click", () => hostAction(b.dataset.bg)));
   }
   loadBalance().catch(() => {});

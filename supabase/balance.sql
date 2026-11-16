@@ -133,6 +133,16 @@ end;
 $$;
 
 
+-- 3-1 워밍업 질문 목록 (관리자가 화면에서 수정). 비어 있으면 화면(config.js)의 기본 질문을 쓴다.
+create table if not exists public.bg_warm_questions (
+  q     int  primary key check (q between 1 and 100),
+  a     text not null check (char_length(btrim(a)) between 1 and 60),
+  b     text not null check (char_length(btrim(b)) between 1 and 60),
+  topic text not null default '' check (char_length(topic) <= 40)
+);
+alter table public.bg_warm_questions enable row level security;
+revoke all on public.bg_warm_questions from anon, authenticated;
+
 -- 워밍업 투표: 워밍업 중에 지금 보이는 문제에만. 바꿀 수 있다.
 create or replace function public.bg_warm_vote(p_token uuid, p_q int, p_choice text)
 returns boolean
@@ -208,8 +218,16 @@ declare
   v_myq       json;
   v_warm_q    int;
   v_warm      json := '{"A":0,"B":0}'::json;
+  v_warm_n    int;
+  v_warm_cur  json;
 begin
   select status, revealed, warm_q into v_status, v_revealed, v_warm_q from public.bg_state where id = 1;
+
+  select count(*) into v_warm_n from public.bg_warm_questions;
+  if v_status = 'warm' and v_warm_q > 0 then
+    select json_build_object('a', a, 'b', b, 'topic', topic) into v_warm_cur
+    from public.bg_warm_questions where q = v_warm_q;
+  end if;
 
   if v_status = 'warm' and v_warm_q > 0 then
     select json_build_object('A', count(*) filter (where choice = 'A'), 'B', count(*) filter (where choice = 'B'))
@@ -268,6 +286,8 @@ begin
     'status',    v_status,
     'revealed',  v_revealed,
     'warm_q',    v_warm_q,
+    'warm_n',    v_warm_n,
+    'warm_cur',  v_warm_cur,
     'warm',      v_warm,
     'warm_mine', (select choice from public.bg_warm_votes where token = p_token and q = v_warm_q),
     'players',   (select count(*) from public.bg_players),
@@ -335,7 +355,54 @@ end;
 $$;
 
 
--- 진행자: 참가자·질문·투표 전부 지우고 처음 상태로 (리허설 후 초기화용)
+-- 관리자: 워밍업 질문 목록 보기 / 저장(전체 교체). [{"a":..,"b":..,"topic":..}, ...] 최대 100개
+create or replace function public.bg_admin_warm_list(p_key text)
+returns json
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_key text;
+begin
+  select key into v_key from public.bg_admin where id = 1;
+  if v_key is null then raise exception 'ADMIN_NOT_SET'; end if;
+  if p_key is distinct from v_key then raise exception 'BAD_KEY'; end if;
+  return (select coalesce(json_agg(json_build_object('a', a, 'b', b, 'topic', topic) order by q), '[]'::json)
+          from public.bg_warm_questions);
+end;
+$$;
+
+create or replace function public.bg_admin_warm_save(p_key text, p_list json)
+returns json
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_key text;
+begin
+  select key into v_key from public.bg_admin where id = 1;
+  if v_key is null then raise exception 'ADMIN_NOT_SET'; end if;
+  if p_key is distinct from v_key then raise exception 'BAD_KEY'; end if;
+  if p_list is null or json_typeof(p_list) <> 'array' or json_array_length(p_list) not between 1 and 100 then
+    raise exception 'INVALID_LIST';
+  end if;
+  begin
+    delete from public.bg_warm_questions where true;
+    insert into public.bg_warm_questions (q, a, b, topic)
+    select ord::int, btrim(coalesce(e->>'a', '')), btrim(coalesce(e->>'b', '')), btrim(coalesce(e->>'topic', ''))
+    from json_array_elements(p_list) with ordinality as t(e, ord);
+  exception when check_violation then
+    raise exception 'INVALID_LIST';
+  end;
+  return public.bg_admin_warm_list(p_key);
+end;
+$$;
+
+
+-- 관리자: 참가자·질문·투표 전부 지우고 처음 상태로 (리허설 후 초기화용)
 create or replace function public.bg_admin_reset(p_key text)
 returns boolean
 language plpgsql
@@ -368,6 +435,8 @@ revoke all on function public.bg_overview(uuid)                   from public;
 revoke all on function public.bg_warm_vote(uuid, int, text)       from public;
 revoke all on function public.bg_admin_set(text, text, int, int)  from public;
 revoke all on function public.bg_admin_reset(text)                from public;
+revoke all on function public.bg_admin_warm_list(text)            from public;
+revoke all on function public.bg_admin_warm_save(text, json)      from public;
 grant execute on function public.bg_join(text)                      to anon, authenticated;
 grant execute on function public.bg_submit(uuid, text, text, text)  to anon, authenticated;
 grant execute on function public.bg_vote(uuid, int, text)           to anon, authenticated;
@@ -375,6 +444,8 @@ grant execute on function public.bg_overview(uuid)                  to anon, aut
 grant execute on function public.bg_warm_vote(uuid, int, text)      to anon, authenticated;
 grant execute on function public.bg_admin_set(text, text, int, int) to anon, authenticated;
 grant execute on function public.bg_admin_reset(text)               to anon, authenticated;
+grant execute on function public.bg_admin_warm_list(text)           to anon, authenticated;
+grant execute on function public.bg_admin_warm_save(text, json)     to anon, authenticated;
 
 
 -- ── 진행자 비밀번호 (이미 설정했다면 다시 할 필요 없음) ──
@@ -384,5 +455,6 @@ grant execute on function public.bg_admin_reset(text)               to anon, aut
 -- ── 관리자용 (필요할 때 SQL Editor 에서 직접 실행) ─────────────
 -- 상태 보기   : select * from public.bg_state;
 -- 질문 보기   : select q, title, a, b, (select name from public.bg_players p where p.token = bg_questions.token) as author from public.bg_questions order by q;
+-- 워밍업 목록 : select * from public.bg_warm_questions order by q;   (화면의 관리자 메뉴에서 수정하는 것을 권장)
 -- 질문 삭제   : delete from public.bg_questions where title = '지울 질문 주제';
 -- 전체 초기화 : update public.bg_state set status = 'ready', revealed = 0, warm_q = 0; truncate public.bg_warm_votes; truncate public.bg_votes; delete from public.bg_questions where true; delete from public.bg_players where true;
