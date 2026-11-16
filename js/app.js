@@ -387,6 +387,7 @@
     INVALID_NAME: "이름을 1~20자로 입력해 주세요.",
     NAME_TAKEN: "이미 같은 이름으로 참가한 사람이 있어요. 다른 이름(예: 성까지)으로 입력해 주세요.",
     GAME_FULL: "참가 인원(8명)이 가득 찼어요.",
+    NOT_WARM: "지금 보이는 워밍업 문제가 아니에요. 화면이 곧 바뀌어요.",
     NOT_SUBMIT: "지금은 질문을 낼 수 있는 시간이 아니에요.",
     INVALID_QUESTION: "주제는 1~40자, 선택지는 각각 1~30자로 입력해 주세요.",
     NOT_OPEN: "지금은 투표 시간이 아니에요.",
@@ -420,7 +421,9 @@
     bgData = data;
     if (prev && !isHost) {
       if (prev.status !== data.status) {
-        toast({ ready: "대기 상태로 돌아갔어요", submit: "질문 제출이 열렸어요 ✍ 질문을 내주세요", open: "투표가 열렸어요 🗳 A·B를 골라주세요", closed: "투표가 마감됐어요" }[data.status]);
+        toast({ ready: "대기 상태로 돌아갔어요", warm: "3-1 워밍업이 시작됐어요 🔥", submit: "질문 제출이 열렸어요 ✍ 질문을 내주세요", open: "투표가 열렸어요 🗳 A·B를 골라주세요", closed: "투표가 마감됐어요" }[data.status]);
+      } else if (data.status === "warm" && data.warm_q !== prev.warm_q) {
+        toast(`워밍업 Q${data.warm_q}번으로 넘어갔어요`);
       } else if (data.revealed > prev.revealed) {
         toast(`Q${data.revealed} 결과가 공개됐어요 🎤`);
       }
@@ -440,8 +443,10 @@
     const mine = d.mine || {};
     const done = d.status === "closed" && total > 0 && d.revealed >= total;
 
+    const WARM = CFG.balanceWarm || [];
     $("bg-badge").textContent = d.status === "ready" ? "대기 중"
-      : d.status === "submit" ? "질문 제출 중"
+      : d.status === "warm" ? `3-1 워밍업 ${d.warm_q}/${WARM.length}`
+      : d.status === "submit" ? "3-2 질문 제출 중"
       : d.status === "open" ? "투표 중"
       : done ? "결과 공개 완료"
       : d.revealed > 0 ? `결과 공개 중 ${d.revealed}/${total}` : "투표 마감 · 공개 대기";
@@ -452,6 +457,8 @@
     box.hidden = !me;
     if (me) box.replaceChildren(el("span", {}, "✅ ", el("b", { textContent: me.name }), " 님으로 참가 중이에요"));
     $("bg-intro").hidden = d.status !== "ready" && !!me;
+
+    renderWarm(d, me);
 
     // 질문 내기 (제출 단계에서만)
     const qform = $("bg-qform");
@@ -467,6 +474,7 @@
     const myCount = Object.keys(mine).length;
     $("bg-status").textContent =
       d.status === "ready" ? `참가 ${d.players}/${MAX_PLAYERS}명`
+      : d.status === "warm" ? (me ? "🔥 3-1 워밍업 · 점수 없이 가볍게! 고르면 비율이 바로 보여요" : "🔥 워밍업 중이에요. 위에서 이름을 입력해 참가하면 고를 수 있어요.")
       : d.status === "submit" ? (me ? `✍ 질문 제출 중 · 제출 ${d.submitted}/${MAX_PLAYERS} · 누가 어떤 질문을 냈는지는 비공개예요` : "✍ 질문 제출 중이에요. 위에서 이름을 입력해 참가해 주세요.")
       : d.status === "open" ? (me ? `🗳 투표 중 · 내 선택 ${myCount}/${total} · 마감 전에는 바꿀 수 있어요` : "🗳 투표 중이에요. 참가 인원이 가득 차 새로 참가할 수는 없어요.")
       : d.status === "closed" && d.revealed === 0 ? "투표가 마감됐어요. 곧 결과와 출제자를 한 문제씩 공개해요!" : "";
@@ -510,12 +518,56 @@
     }));
 
     // 점수판
-    const showScores = d.revealed > 0 && d.scores.length > 0;
+    const showScores = d.status !== "warm" && d.revealed > 0 && d.scores.length > 0;
     $("bg-score-box").hidden = !showScores;
     if (showScores) {
       $("bg-scores").replaceChildren(...d.scores.map((s, i) =>
         el("li", { className: me && s.name === me.name ? "me" : "" },
           el("span", { textContent: `${i + 1}. ${s.name}` }), el("span", { textContent: `${s.score}점` }))));
+    }
+  }
+
+  // 3-1 워밍업: 고정 질문을 한 문제씩, 점수 없음, 비율은 바로 공개
+  function renderWarm(d, me) {
+    const box = $("bg-warm");
+    box.hidden = d.status !== "warm";
+    if (box.hidden) return;
+    const W = CFG.balanceWarm || [];
+    const n = d.warm_q;
+    const w = W[n - 1];
+    if (!w) { box.replaceChildren(el("p", { className: "muted", textContent: "곧 첫 질문이 나와요!" })); return; }
+    const res = d.warm || { A: 0, B: 0 };
+    const sum = res.A + res.B;
+    const choices = ["A", "B"].map((c, i) => {
+      const pct = sum ? Math.round((res[c] / sum) * 100) : 0;
+      const b = el("button", {
+        type: "button",
+        className: "bg-choice" + (d.warm_mine === c ? " sel" : "") + (sum > 0 && res[c] > res[c === "A" ? "B" : "A"] ? " win" : ""),
+        disabled: !me,
+      }, el("b", { textContent: c }), el("span", { textContent: w[i] }),
+        el("span", { className: "pct", textContent: `${pct}% (${res[c]}명)` }), el("i", { className: "bar", style: `--w:${pct}%` }));
+      b.addEventListener("click", () => warmVote(n, c));
+      return b;
+    });
+    box.replaceChildren(
+      el("p", { className: "bg-q-head" }, el("small", { textContent: `3-1 · Q${n}/${W.length}` }), w[2]),
+      el("div", { className: "bg-choices" }, ...choices),
+      el("p", { className: "bg-result", textContent: `투표 ${sum}/${d.players}명 · ${d.warm_mine ? "선택 완료 · 바꿀 수 있어요" : "하나를 골라주세요"}` }));
+  }
+
+  async function warmVote(q, choice) {
+    const me = bgPlayer();
+    if (!me || !bgData || bgData.status !== "warm" || bgData.warm_q !== q) return;
+    if (bgData.warm_mine === choice) return;
+    bgData.warm_mine = choice;         // 먼저 화면에 반영
+    bgSig = ""; renderBalance();
+    try {
+      const { error } = await sb.rpc("bg_warm_vote", { p_token: me.token, p_q: q, p_choice: choice });
+      if (error) throw error;
+    } catch (e) {
+      toast(bgErrMsg(e));
+    } finally {
+      await loadBalance().catch(() => {});
     }
   }
 
@@ -582,10 +634,11 @@
     const d = bgData;
     const total = (d.questions || []).length;
     const next = d.revealed + 1;
-    const stat = { ready: "대기", submit: "질문 제출 중", open: "투표 중", closed: "마감" }[d.status];
+    const stat = { ready: "대기", warm: "3-1 워밍업", submit: "질문 제출 중", open: "투표 중", closed: "마감" }[d.status];
     const votes = (n) => (d.progress && d.progress[n]) || 0;
     $("bg-host-info").textContent =
       `상태 ${stat} · 참가 ${d.players}/${MAX_PLAYERS}명 · 질문 제출 ${d.submitted}/${MAX_PLAYERS}` +
+      (d.status === "warm" ? ` · 워밍업 Q${d.warm_q}/${(CFG.balanceWarm || []).length} 투표 ${(d.warm?.A || 0) + (d.warm?.B || 0)}/${d.players}명` : "") +
       (total ? ` · 공개 ${d.revealed}/${total}` : "") +
       (d.status === "open" ? ` · 투표 합계 ${Object.values(d.progress || {}).reduce((a, b) => a + b, 0)}/${d.players * total}` : "") +
       (total && next <= total ? ` · 다음 공개 Q${next} 투표 ${votes(next)}/${d.players}명` : "");
@@ -596,9 +649,16 @@
     if (!key) { toast("관리자 비밀번호를 입력해 주세요"); $("bg-key").focus(); return; }
     if (!bgData || bgBusy) return;
     const total = (bgData.questions || []).length;
+    const WN = (CFG.balanceWarm || []).length;
+    if ((kind === "wnext" || kind === "wprev") && bgData.status !== "warm") { toast("워밍업 중에만 쓸 수 있어요 (먼저 워밍업 시작)"); return; }
+    if (kind === "wnext" && bgData.warm_q >= WN) { toast("마지막 워밍업 질문이에요. 다음은 '질문 제출 열기'예요"); return; }
+    if (kind === "wprev" && bgData.warm_q <= 1) { toast("첫 번째 질문이에요"); return; }
     if (kind === "next" && (!total || bgData.revealed >= total)) { toast(total ? "마지막 문제까지 모두 공개했어요" : "아직 공개할 문제가 없어요 (투표를 먼저 열어 주세요)"); return; }
     let args;
-    if (kind === "submit") args = { p_status: "submit" };
+    if (kind === "warm") args = { p_status: "warm", p_warm_q: Math.max(1, bgData.warm_q) };
+    else if (kind === "wnext") args = { p_warm_q: bgData.warm_q + 1 };
+    else if (kind === "wprev") args = { p_warm_q: bgData.warm_q - 1 };
+    else if (kind === "submit") args = { p_status: "submit" };
     else if (kind === "open") args = { p_status: "open" };
     else if (kind === "close") args = { p_status: "closed" };
     else if (kind === "next") args = { p_status: "closed", p_revealed: Math.min(total, bgData.revealed + 1) };
@@ -617,6 +677,9 @@
         const { error } = await sb.rpc("bg_admin_set", { p_key: key, ...args });
         if (error) throw error;
         const done = {
+          warm: "✅ 3-1 워밍업을 시작했어요",
+          wnext: `✅ 워밍업 Q${args.p_warm_q}번으로 넘어갔어요`,
+          wprev: `✅ 워밍업 Q${args.p_warm_q}번으로 돌아갔어요`,
           submit: "✅ 질문 제출을 열었어요",
           open: "✅ 투표를 열었어요",
           close: "✅ 투표를 마감했어요",

@@ -1,10 +1,11 @@
 -- ═══════════════════════════════════════════════════════════════
--- GAME 3 황금밸런스 게임 — Supabase 스키마 (v2: 출제자 점수제)
+-- GAME 3 밸런스 게임 — Supabase 스키마 (v3: 3-1 워밍업 + 3-2 황금밸런스)
 -- schema.sql, chat.sql 과 같은 프로젝트의 SQL Editor 에서 이 파일 전체를 붙여넣고 Run
 -- (여러 번 실행해도 안전. 이전 버전(다수파 1점) 위에 그대로 실행 가능)
 --
 -- 진행 방식 (참가 8명 고정)
---   · 진행: 대기(ready) → 질문 제출(submit) → 투표(open) → 마감(closed) → 한 문제씩 공개
+--   · 3-1 워밍업(warm): 고정 질문(config.js)을 한 문제씩, 점수 없음, 투표 비율은 바로 공개.
+--   · 3-2 진행: 대기(ready) → 질문 제출(submit) → 투표(open) → 마감(closed) → 한 문제씩 공개
 --   · 각자 현장에서 질문(주제 + A/B) 1개를 낸다. 진행자가 '질문 제출'을 열기 전에는 낼 수 없다.
 --   · 모두(출제자 포함) 모든 문제에 투표한다. 투표자는 점수가 없다.
 --   · 출제자 점수: 8표가 4:4 → 2점, 3:5 → 1점, 그 외 0점. (표 차이 0~1 → 2점, 2 → 1점)
@@ -25,10 +26,11 @@ create table if not exists public.bg_state (
   status   text not null default 'ready',
   revealed int  not null default 0 check (revealed between 0 and 100)
 );
+alter table public.bg_state add column if not exists warm_q int not null default 0 check (warm_q between 0 and 100);
 -- 상태에 'submit' 추가 (이전 버전 테이블 대응)
 alter table public.bg_state drop constraint if exists bg_state_status_check;
 alter table public.bg_state add constraint bg_state_status_check
-  check (status in ('ready', 'submit', 'open', 'closed'));
+  check (status in ('ready', 'warm', 'submit', 'open', 'closed'));
 insert into public.bg_state (id) values (1) on conflict (id) do nothing;
 
 create table if not exists public.bg_players (
@@ -54,6 +56,17 @@ create table if not exists public.bg_votes (
   choice text not null check (choice in ('A', 'B')),
   primary key (token, q)
 );
+
+-- 3-1 워밍업 투표 (점수 없음)
+create table if not exists public.bg_warm_votes (
+  token  uuid not null references public.bg_players (token) on delete cascade,
+  q      int  not null check (q between 1 and 100),
+  choice text not null check (choice in ('A', 'B')),
+  primary key (token, q)
+);
+
+alter table public.bg_warm_votes enable row level security;
+revoke all on public.bg_warm_votes from anon, authenticated;
 
 alter table public.bg_admin     enable row level security;   -- 정책 없음 = anon 직접 접근 차단
 alter table public.bg_state     enable row level security;
@@ -120,6 +133,33 @@ end;
 $$;
 
 
+-- 워밍업 투표: 워밍업 중에 지금 보이는 문제에만. 바꿀 수 있다.
+create or replace function public.bg_warm_vote(p_token uuid, p_q int, p_choice text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if (select status from public.bg_state where id = 1) <> 'warm' then
+    raise exception 'NOT_WARM';
+  end if;
+  if p_q is distinct from (select warm_q from public.bg_state where id = 1) then
+    raise exception 'NOT_WARM';
+  end if;
+  if not exists (select 1 from public.bg_players where token = p_token) then
+    raise exception 'NO_PLAYER';
+  end if;
+  if p_choice not in ('A', 'B') then
+    raise exception 'INVALID_VOTE';
+  end if;
+  insert into public.bg_warm_votes (token, q, choice) values (p_token, p_q, p_choice)
+  on conflict (token, q) do update set choice = excluded.choice;
+  return true;
+end;
+$$;
+
+
 -- 투표: 투표가 열려 있을 때만, 존재하는 문제에만. 열려 있는 동안은 바꿀 수 있다.
 create or replace function public.bg_vote(p_token uuid, p_q int, p_choice text)
 returns boolean
@@ -166,8 +206,15 @@ declare
   v_authors   json;
   v_scores    json;
   v_myq       json;
+  v_warm_q    int;
+  v_warm      json := '{"A":0,"B":0}'::json;
 begin
-  select status, revealed into v_status, v_revealed from public.bg_state where id = 1;
+  select status, revealed, warm_q into v_status, v_revealed, v_warm_q from public.bg_state where id = 1;
+
+  if v_status = 'warm' and v_warm_q > 0 then
+    select json_build_object('A', count(*) filter (where choice = 'A'), 'B', count(*) filter (where choice = 'B'))
+    into v_warm from public.bg_warm_votes where q = v_warm_q;
+  end if;
 
   if v_status in ('open', 'closed') then
     select coalesce(json_agg(json_build_object('q', q, 'title', title, 'a', a, 'b', b) order by q), '[]'::json)
@@ -220,6 +267,9 @@ begin
   return json_build_object(
     'status',    v_status,
     'revealed',  v_revealed,
+    'warm_q',    v_warm_q,
+    'warm',      v_warm,
+    'warm_mine', (select choice from public.bg_warm_votes where token = p_token and q = v_warm_q),
     'players',   (select count(*) from public.bg_players),
     'submitted', (select count(*) from public.bg_questions),
     'questions', v_questions,
@@ -235,9 +285,10 @@ end;
 $$;
 
 
--- 진행자: 상태 바꾸기. p_status = ready|submit|open|closed, p_revealed = 공개한 문제 수 (비우면 그대로)
+-- 관리자: 상태 바꾸기. p_status = ready|warm|submit|open|closed, p_revealed = 공개한 문제 수, p_warm_q = 워밍업 문제 번호 (비우면 그대로)
 --   open 으로 바뀔 때 질문에 무작위 순서로 번호(q)를 붙인다.
-create or replace function public.bg_admin_set(p_key text, p_status text default null, p_revealed int default null)
+drop function if exists public.bg_admin_set(text, text, int);
+create or replace function public.bg_admin_set(p_key text, p_status text default null, p_revealed int default null, p_warm_q int default null)
 returns json
 language plpgsql
 security definer
@@ -254,7 +305,7 @@ begin
   if p_key is distinct from v_key then
     raise exception 'BAD_KEY';
   end if;
-  if p_status is not null and p_status not in ('ready', 'submit', 'open', 'closed') then
+  if p_status is not null and p_status not in ('ready', 'warm', 'submit', 'open', 'closed') then
     raise exception 'INVALID_STATUS';
   end if;
 
@@ -276,7 +327,8 @@ begin
 
   update public.bg_state
      set status   = coalesce(p_status, status),
-         revealed = least(greatest(coalesce(p_revealed, revealed), 0), 100)
+         revealed = least(greatest(coalesce(p_revealed, revealed), 0), 100),
+         warm_q   = least(greatest(coalesce(p_warm_q, warm_q), 0), 100)
    where id = 1;
   return public.bg_overview(null);
 end;
@@ -300,10 +352,11 @@ begin
   if p_key is distinct from v_key then
     raise exception 'BAD_KEY';
   end if;
+  delete from public.bg_warm_votes where true;
   delete from public.bg_votes     where true;
   delete from public.bg_questions where true;
   delete from public.bg_players   where true;
-  update public.bg_state set status = 'ready', revealed = 0 where id = 1;
+  update public.bg_state set status = 'ready', revealed = 0, warm_q = 0 where id = 1;
   return true;
 end;
 $$;
@@ -312,13 +365,15 @@ revoke all on function public.bg_join(text)                       from public;
 revoke all on function public.bg_submit(uuid, text, text, text)   from public;
 revoke all on function public.bg_vote(uuid, int, text)            from public;
 revoke all on function public.bg_overview(uuid)                   from public;
-revoke all on function public.bg_admin_set(text, text, int)       from public;
+revoke all on function public.bg_warm_vote(uuid, int, text)       from public;
+revoke all on function public.bg_admin_set(text, text, int, int)  from public;
 revoke all on function public.bg_admin_reset(text)                from public;
 grant execute on function public.bg_join(text)                      to anon, authenticated;
 grant execute on function public.bg_submit(uuid, text, text, text)  to anon, authenticated;
 grant execute on function public.bg_vote(uuid, int, text)           to anon, authenticated;
 grant execute on function public.bg_overview(uuid)                  to anon, authenticated;
-grant execute on function public.bg_admin_set(text, text, int)      to anon, authenticated;
+grant execute on function public.bg_warm_vote(uuid, int, text)      to anon, authenticated;
+grant execute on function public.bg_admin_set(text, text, int, int) to anon, authenticated;
 grant execute on function public.bg_admin_reset(text)               to anon, authenticated;
 
 
@@ -330,4 +385,4 @@ grant execute on function public.bg_admin_reset(text)               to anon, aut
 -- 상태 보기   : select * from public.bg_state;
 -- 질문 보기   : select q, title, a, b, (select name from public.bg_players p where p.token = bg_questions.token) as author from public.bg_questions order by q;
 -- 질문 삭제   : delete from public.bg_questions where title = '지울 질문 주제';
--- 전체 초기화 : update public.bg_state set status = 'ready', revealed = 0; truncate public.bg_votes; delete from public.bg_questions where true; delete from public.bg_players where true;
+-- 전체 초기화 : update public.bg_state set status = 'ready', revealed = 0, warm_q = 0; truncate public.bg_warm_votes; truncate public.bg_votes; delete from public.bg_questions where true; delete from public.bg_players where true;
