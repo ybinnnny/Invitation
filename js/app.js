@@ -416,7 +416,15 @@
     if (error) { $("balance-notice").textContent = "밸런스 게임을 불러오지 못했어요. 새로고침해 주세요."; $("balance-notice").hidden = false; throw error; }
     $("balance-notice").hidden = true;
     if (mine && !data.me) store.del("bg-player"); // 서버가 초기화된 경우
+    const prev = bgData;
     bgData = data;
+    if (prev && !isHost) {
+      if (prev.status !== data.status) {
+        toast({ ready: "대기 상태로 돌아갔어요", submit: "질문 제출이 열렸어요 ✍ 질문을 내주세요", open: "투표가 열렸어요 🗳 A·B를 골라주세요", closed: "투표가 마감됐어요" }[data.status]);
+      } else if (data.revealed > prev.revealed) {
+        toast(`Q${data.revealed} 결과가 공개됐어요 🎤`);
+      }
+    }
     $("bg-synced").textContent = "마지막 갱신 " + new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour: "numeric", minute: "2-digit", second: "2-digit" }).format(new Date());
     const sig = JSON.stringify(data) + (bgPlayer()?.token || "");
     if (sig !== bgSig) { bgSig = sig; renderBalance(); }
@@ -588,6 +596,7 @@
     if (!key) { toast("관리자 비밀번호를 입력해 주세요"); $("bg-key").focus(); return; }
     if (!bgData || bgBusy) return;
     const total = (bgData.questions || []).length;
+    if (kind === "next" && (!total || bgData.revealed >= total)) { toast(total ? "마지막 문제까지 모두 공개했어요" : "아직 공개할 문제가 없어요 (투표를 먼저 열어 주세요)"); return; }
     let args;
     if (kind === "submit") args = { p_status: "submit" };
     else if (kind === "open") args = { p_status: "open" };
@@ -607,6 +616,15 @@
       } else {
         const { error } = await sb.rpc("bg_admin_set", { p_key: key, ...args });
         if (error) throw error;
+        const done = {
+          submit: "✅ 질문 제출을 열었어요",
+          open: "✅ 투표를 열었어요",
+          close: "✅ 투표를 마감했어요",
+          ready: "✅ 대기 상태로 되돌렸어요",
+          next: `✅ Q${args.p_revealed} 결과를 공개했어요`,
+          prev: `✅ 공개를 취소했어요 (공개 ${args.p_revealed}/${total})`,
+        }[kind];
+        toast(done + " · 참가자 화면은 3초 안에 바뀌어요");
       }
     } catch (e) {
       toast(bgErrMsg(e));
@@ -649,8 +667,13 @@
     $("bg-host").querySelectorAll("[data-bg]").forEach((b) => b.addEventListener("click", () => hostAction(b.dataset.bg)));
   }
   loadBalance().catch(() => {});
-  // 게임이 진행 중일 때만 5초마다 갱신 (대기 중에는 아래 15초 갱신으로 충분)
-  setInterval(() => { if (bgData && bgData.status !== "ready" && !bgBusy) loadBalance().catch(() => {}); }, 5000);
+  // 게임 팝업이 열려 있으면 3초마다, 닫혀 있어도 게임이 진행 중이면 6초마다 갱신 (대기 중 닫혀 있으면 아래 15초 갱신)
+  let bgTick = 0;
+  setInterval(() => {
+    if (bgBusy) return;
+    const opened = !$("balance-modal").hidden;
+    if (opened || (bgData && bgData.status !== "ready" && ++bgTick % 2 === 0)) loadBalance().catch(() => {});
+  }, 3000);
 
   // 다른 사람의 선택·글을 반영하기 위해 15초마다 새로고침한다.
   // 카카오톡 같은 앱 안 브라우저는 복귀해도 visibilitychange 가 안 오거나 document.hidden 이 틀릴 수 있어,
