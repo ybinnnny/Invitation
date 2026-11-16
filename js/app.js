@@ -380,7 +380,7 @@
   }
 
   // ── GAME 3 황금밸런스 게임 ───────────────────────────────────
-  // 질문은 현장에서 각자 낸다(진행자가 '질문 제출'을 연 동안만). 출제자·선택 비중은 공개 전에 서버가 내보내지 않는다.
+  // 질문은 현장에서 각자 낸다(관리자가 '질문 제출'을 연 동안만). 출제자·선택 비중은 공개 전에 서버가 내보내지 않는다.
   // 출제자 점수: 8표가 4:4 → 2점, 3:5 → 1점, 그 외 0점 (표 차이 0~1 → 2점, 2 → 1점). 점수는 서버가 계산.
   const MAX_PLAYERS = 8;
   const BG_ERR = {
@@ -393,8 +393,8 @@
     INVALID_VOTE: "투표할 수 없는 문제예요.",
     NO_PLAYER: "참가 정보를 찾을 수 없어요. 새로고침 후 다시 참가해 주세요.",
     NO_QUESTIONS: "제출된 질문이 없어서 투표를 열 수 없어요.",
-    BAD_KEY: "진행자 비밀번호가 달라요.",
-    ADMIN_NOT_SET: "진행자 비밀번호가 아직 설정되지 않았어요. (balance.sql 맨 아래 안내)",
+    BAD_KEY: "관리자 비밀번호가 달라요.",
+    ADMIN_NOT_SET: "관리자 비밀번호가 아직 설정되지 않았어요. (balance.sql 맨 아래 안내)",
   };
   const bgErrMsg = (e) => {
     const m = String(e?.message || e || "");
@@ -458,7 +458,7 @@
     // 안내 줄
     const myCount = Object.keys(mine).length;
     $("bg-status").textContent =
-      d.status === "ready" ? `참가 ${d.players}/${MAX_PLAYERS}명 · 진행자가 시작하면 질문 제출이 열려요. (미리 질문을 낼 수는 없어요)`
+      d.status === "ready" ? `참가 ${d.players}/${MAX_PLAYERS}명`
       : d.status === "submit" ? (me ? `✍ 질문 제출 중 · 제출 ${d.submitted}/${MAX_PLAYERS} · 누가 어떤 질문을 냈는지는 비공개예요` : "✍ 질문 제출 중이에요. 위에서 이름을 입력해 참가해 주세요.")
       : d.status === "open" ? (me ? `🗳 투표 중 · 내 선택 ${myCount}/${total} · 마감 전에는 바꿀 수 있어요` : "🗳 투표 중이에요. 참가 인원이 가득 차 새로 참가할 수는 없어요.")
       : d.status === "closed" && d.revealed === 0 ? "투표가 마감됐어요. 곧 결과와 출제자를 한 문제씩 공개해요!" : "";
@@ -568,7 +568,7 @@
     }
   }
 
-  // 진행자 메뉴 (주소 끝에 ?host 를 붙였을 때만 보임. 실제 권한은 서버의 진행자 비밀번호가 결정)
+  // 관리자 메뉴 (주소 끝에 ?host 를 붙였을 때만 보임. 실제 권한은 서버의 관리자 비밀번호가 결정)
   function renderHostInfo() {
     if (!isHost || !bgData) return;
     const d = bgData;
@@ -585,7 +585,7 @@
 
   async function hostAction(kind) {
     const key = $("bg-key").value;
-    if (!key) { toast("진행자 비밀번호를 입력해 주세요"); $("bg-key").focus(); return; }
+    if (!key) { toast("관리자 비밀번호를 입력해 주세요"); $("bg-key").focus(); return; }
     if (!bgData || bgBusy) return;
     const total = (bgData.questions || []).length;
     let args;
@@ -620,7 +620,7 @@
   // ── 시작 ─────────────────────────────────────────────────────
   renderStatic();
   setupModals();
-  if (location.hash === "#balance") document.querySelector('[data-open="balance-modal"]').click(); // 진행자용 직접 링크
+  if (location.hash === "#balance") document.querySelector('[data-open="balance-modal"]').click(); // 관리자용 직접 링크
   $("my-name").value = store.get("my-name") || "";
   $("chat-name").value = store.get("chat-name") || "";
   $("bg-name").value = store.get("bg-name") || store.get("my-name") || "";
